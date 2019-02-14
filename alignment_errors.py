@@ -1,0 +1,3 @@
+
+class AlignmentException(Exception):
+    pass
