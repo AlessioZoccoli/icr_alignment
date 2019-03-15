@@ -1,4 +1,5 @@
 from copy import deepcopy
+from pprint import pprint
 
 import numpy as np
 import cv2
@@ -120,12 +121,6 @@ def spaces_in_line_manipulated(line_image: np.ndarray, strip=True, discount=10) 
     starts_at = spaces_intervals[0][1]
     ends_at = spaces_intervals[-1][0]
 
-    # not much ink on the end but we don't want them as spaces
-    # if spaces_intervals[0][0] - starts_at <= 30 and spaces_intervals[0][1]-spaces_intervals[0][0] < 25:
-    #     spaces_intervals.pop(0)
-    # if ends_at - spaces_intervals[-1][1] <= 30 and spaces_intervals[-1][1]-spaces_intervals[-1][0] < 25:
-    #     spaces_intervals.pop(-1)
-
     # if strip the starting and ending space are omitted in the intervals but will be returned separately
     if strip:
         #
@@ -155,12 +150,7 @@ def spaces_in_line_simple(line_image: np.ndarray, strip=True, discount=10) -> (l
 
     # erosion = line_image
     count_white_col = np.argwhere(np.count_nonzero(line_image, axis=0) >= line_image.shape[0]-discount).flatten().tolist()
-    # count_white_col = np.argwhere(np.count_nonzero(
-    #     line_image[midline-round(line_image.shape[0]*1/3):midline+round(line_image.shape[0]*1/3), :], axis=0)
-    #                               >= line_image.shape[0]*2/3-6).flatten().tolist()
-
     assert count_white_col
-
     spaces = group_consecutive_values(count_white_col, threshold=1)
 
     # first and last column indexes
@@ -195,57 +185,6 @@ def center_space(space_interval: tuple) -> float:
     start, end = space_interval
     assert end > start
     return (end - start) / 2 + start
-
-
-def intersect2d(arr1: np.ndarray, arr2: np.ndarray) -> (np.ndarray, int):
-    """
-    Returns the biggest and with the most non zero elements intersection matrix of arr1 and arr2
-
-        a = np.array([[1, 1, 2, 0, 0, 0, 0],
-            [0, 0, 0, 2, 0, 0, 0]])
-
-        b = np.array([[0, 0, 2, 0],
-            [0, 0, 0, 2]])
-
-        intersect2d(a, b)
-        (array([[1, 1, 2, 0],
-            [0, 0, 0, 2]]), 0)
-
-
-    :param arr1: first array
-    :param arr2: second array
-    :return: intersection matrix of arr1 and arr2 and the offset or the index of the bigger array column from which
-    starts the optimum intersection
-    """
-
-    raise NotImplementedError
-
-    assert arr1.shape[0] == arr2.shape[0]
-    # smaller array slides on the bigger one
-
-    if arr1.shape == arr2.shape:
-        return np.bitwise_and(arr1, arr2)
-    elif arr1.shape[1] >= arr2.shape[1]:
-        bigger = arr1
-        smaller = arr2
-    else:
-        bigger = arr2
-        smaller = arr1
-
-    # the two arrays have different width so the smaller one slides starting from position 0 to
-    # bigger.shape[1] - bigger.shape[1], +1 is added to make it work with the range function
-    sliding = bigger.shape[1] - bigger.shape[1] + 1
-
-    offset = 0
-    nonzero_count = -1
-    for off in range(sliding):
-        equals = bigger[:, off: off+smaller.shape[1]] == smaller
-        count_non0 = np.count_nonzero(equals)
-        if count_non0 > nonzero_count:
-            offset = off
-            nonzero_count = count_non0
-
-    return bigger[:, offset: offset+smaller.shape[1]], offset
 
 
 def group_consecutive_values(values, threshold: int = 2) -> list:
@@ -341,16 +280,126 @@ def remove_left_margin(page_img):
     black_px_per_column = np.count_nonzero(
         cv2.bitwise_not(page_img), axis=0
     )[:page_img.shape[1] // 2]
+
     left_margins = np.argwhere(
-        black_px_per_column < np.average(black_px_per_column) * 0.5
+        black_px_per_column < np.average(black_px_per_column) * 0.5  # 0.5 updated for 40r-44v_130
     )
+
+    # print(left_margins)
+    # pprint(black_px_per_column < np.average(black_px_per_column) * 0.45)
+
     left_margin = int(
         max([min(g) for g in group_consecutive_values(left_margins)])
     )
+
     return page_img[:, left_margin:], left_margin
 
 
-def page_to_lines(page_img):
+def remove_left_margin_2(page_img):
+    first_quarter = page_img.shape[1] // 4
+    third_quarter = 3 * first_quarter
+
+    white_px_per_column = np.count_nonzero(
+        page_img[:, first_quarter: third_quarter], axis=0
+    )
+    left_margins = np.argwhere(
+        (np.count_nonzero(page_img[:, :first_quarter], axis=0) - np.mean(white_px_per_column)) > 150.0
+    )
+    consecutive_values = group_consecutive_values(left_margins)
+    left_margin = int(
+        max([min(g) for g in consecutive_values])
+    )
+
+    return page_img[:, left_margin:], left_margin
+
+
+def remove_left_margin_fourier_manipulated(page_img: np.ndarray) -> tuple:
+    """
+    removes left column of space + big capital letters
+    https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_transforms/py_fourier_transform/py_fourier_transform.html
+    :param page_img: input image
+    :return: cropped image and left margin
+    """
+
+    first_quarter_X = page_img.shape[1] // 4
+    third_quarter_X = 3 * first_quarter_X
+    # first_half_Y = page_img.shape[0] // 2
+
+    color_threshold = 24 # 230
+
+    # FOURIER ANALYSIS
+    f = np.fft.fft2(page_img)
+    fshift = np.fft.fftshift(f)
+    rows, cols = page_img.shape
+    crow, ccol = rows // 2, cols // 2
+    fshift[crow - 30:crow + 30, ccol - 30:ccol + 30] = 0
+    f_ishift = np.fft.ifftshift(fshift)
+    img_back = np.abs(np.fft.ifft2(f_ishift))
+    np.putmask(img_back, img_back < color_threshold, 0)
+
+    kernel_dil = np.ones((4, 1), np.uint8)
+    kernel_erosion = np.ones((1, 4), np.uint8)
+    dilation = cv2.dilate(deepcopy(img_back), kernel_dil, iterations=5)
+    erosion = cv2.erode(dilation, kernel_erosion, iterations=5)
+
+    # CROPPING
+    # we have text lines in range [:, first_quarter_X: third_quarter_X]
+    white_px_per_column = erosion[:, :third_quarter_X] >= color_threshold
+    mean_white_px = np.mean(np.count_nonzero(white_px_per_column[:, first_quarter_X:], axis=0))
+    left_margins = np.argwhere(
+        np.count_nonzero(white_px_per_column[:, :first_quarter_X], axis=0) <= mean_white_px * 0.59
+    )
+    left_margin = max(group_consecutive_values(left_margins), key=lambda x: len(x))[-1][0]
+
+    return page_img[:, left_margin-17:], left_margin
+
+
+def remove_left_margin_fourier(page_img: np.ndarray, r_or_v=None) -> tuple:
+    """
+    removes left column of space + big capital letters
+    https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_transforms/py_fourier_transform/py_fourier_transform.html
+    :param page_img: input image
+    :param r_or_v: part of the filename image, r = page tend to hang to the left, v = other way around
+    :return: cropped image and left margin
+    """
+    # kernel = np.ones((2, 2), np.uint8)
+    # dilation = cv2.dilate(deepcopy(page_img), kernel, iterations=1)
+    # erosion = cv2.erode(dilation, kernel, iterations=4)
+
+    first_quarter_X = page_img.shape[1] // 4
+    third_quarter_X = 3 * first_quarter_X
+    # first_half_Y = page_img.shape[0] // 2
+
+    color_threshold = 210
+
+    # FOURIER ANALYSIS
+    f = np.fft.fft2(page_img)
+    fshift = np.fft.fftshift(f)
+    rows, cols = page_img.shape
+    crow, ccol = rows // 2, cols // 2
+    fshift[crow - 30:crow + 30, ccol - 30:ccol + 30] = 0
+    f_ishift = np.fft.ifftshift(fshift)
+    img_back = np.abs(np.fft.ifft2(f_ishift))
+    np.putmask(img_back, img_back < color_threshold, 0)
+
+    # CROPPING
+    # we have text lines in range [:, first_quarter_X: third_quarter_X]
+    white_px_per_column = img_back[:, :third_quarter_X] >= color_threshold
+    mean_white_px = np.mean(np.count_nonzero(white_px_per_column[:, first_quarter_X:], axis=0))
+    left_margins = np.argwhere(
+        np.count_nonzero(white_px_per_column[:, :first_quarter_X], axis=0) <= mean_white_px * 0.6
+    )
+    left_margin = max(group_consecutive_values(left_margins), key=lambda x: len(x))[-1][0]
+
+    return page_img[:, left_margin-15:], left_margin
+
+
+def page_to_lines(page_img: np.ndarray) -> np.ndarray:
+    """
+
+    :param page_img: input image in greyscale
+    :return: list of lines of text as (image, y-start of text)
+    """
     black_px_per_row = np.count_nonzero(cv2.bitwise_not(page_img), axis=1)
     threshold = np.average(black_px_per_row) * 1.1
     ixs = np.argwhere(black_px_per_row < threshold)

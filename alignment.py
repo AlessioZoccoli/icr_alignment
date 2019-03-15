@@ -73,11 +73,6 @@ if __name__ == '__main__':
             # word_imgs is a double-ended queue containing computed word segmentations.
             word_imgs = deque(line_to_words(img_line, top_y))
 
-            # if c > 5:
-            #     break
-            # print(c)
-            # c += 1
-
             for tsc_word in tsc_line.split():
                 estimated_width = estimate_word_width_simple(tsc_word)
                 try:

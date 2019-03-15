@@ -1,19 +1,61 @@
 import numpy as np
 from copy import deepcopy
 from numpy.core.multiarray import ndarray
-from cv2 import imshow, waitKey, destroyAllWindows
+from cv2 import imshow, waitKey, destroyAllWindows, INTER_AREA, resize
 
 
-def show_image(image: np.ndarray, name: str = "image"):
+def show_image(image: np.ndarray, name: str = "image", minimize=False):
     """
-    handy wrapper for the image display pipeline
+    Handy wrapper for the image display pipeline
     :param image: image to show
     :param name: name of the window
     :return: None
     """
-    imshow(name, image)
+    destroyAllWindows()
+    if minimize:
+        minimized = resize(image, None, fx=0.45, fy=0.45, interpolation=INTER_AREA)
+        imshow(name, minimized)
+    else:
+        imshow(name, image)
     waitKey(0)
     destroyAllWindows()
+    #waitKey(1)
+
+
+def show_image_ask_spaces(image: np.ndarray, tot_spaces:int, name: str = "specify spaces",
+                          message: str = "which spaces are correct? ('0, ..., n', ':' for all, '' none of them )    ") -> list:
+    """
+    Shows the image and ask the user to insert the correct spaces in <spaces>
+    :param image: image to show
+    :param name: name of the window
+    :param message: print this message while asking for the spaces
+    :return: selected spaces
+    """
+    selection = []
+
+    imshow(name, image)
+    waitKey(0)
+
+    error_str = "\nValid inputs:\n• 0,1,2,...,j,...,n" \
+                "\n• :"\
+                "\n• '' (empty string)\n"
+
+    stop = False
+    print('\n')
+
+    while not stop:
+        try:
+            selection = input(message).strip()
+            if selection == ':':
+                selection = list(range(tot_spaces))
+            elif selection.isnumeric() or len(selection) >= 1:
+                selection = eval("[" + selection + "]")
+            stop = True
+        except SyntaxError:
+            print(error_str)
+    destroyAllWindows()
+
+    return selection
 
 
 def highlight_spaces_line(image: np.ndarray, spaces: list, color: str = "red", random_lightness: bool = False) -> np.ndarray:

@@ -41,12 +41,16 @@ tmtagsHistory
 .bundle
 
 aligned/*
+aligned_Elena/*
 gt_transcriptions/*
 page_images/*
 page_images_crop/*
-
-bounding_boxes*
-
+40r-44v_24_01_uv.*
+40r-44v/*
 *.png
+bounding_boxes*
+*.docx
+*.pages
+*.txt
 
 src/utils/whooshUtils/redisTest.py
