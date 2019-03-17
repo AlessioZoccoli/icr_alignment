@@ -36,8 +36,8 @@ def view_alignment(mapping_path, image_path):
 
 
 if __name__ == '__main__':
-    path_mapping = 'aligned/041r_178_245_1396_1790/mapping/041r_178_245_1396_1790_bbxs2transcription.json'
-    path_image = 'page_images/40r-44v_160/041r.png'
+    path_mapping = 'aligned/040v_599_271_1374_1804/mapping/040v_599_271_1374_1804_bbxs2transcription.json'
+    path_image = 'page_images/40r-44v_160/040v.png'
 
     assert exists(path_mapping)
     assert exists(path_image)

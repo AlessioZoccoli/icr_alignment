@@ -42,9 +42,11 @@ def estimate_word_width(tsc_word: str, default_char_width=20, all_lowercase=Fals
     except IndexError:
         pass
 
-    word = re.sub(r"\(.*?\)|\'.*?\'", "", tsc_wrd
+    # r"\(.*?\)|\'.*?\'"
+    word = re.sub(r"\(.*?\)|\'.*?\'|’.*?’", "", tsc_wrd
                   .replace('(us)', '4')
                   .replace('(ue)', ';')
+                  .replace('(ed)', ';')
                   .replace('(et)', '7')
                   .replace('(rum)', '2')
                   .replace('r(um)', '2')
@@ -78,7 +80,7 @@ def start_alignment():
     map_dir_name = 'mapping'
 
     fnms = set(f.split('.')[0] for f in os.listdir(IMG_DIR))
-    fnms = fnms - set(os.listdir(dst_dir))
+    fnms = sorted(fnms - set(os.listdir(dst_dir)))
 
     print("aligned so far: ", os.listdir(dst_dir))
 
@@ -160,15 +162,23 @@ def start_alignment():
                     other_spaces_m = min((len(spaces_m) - num_spaces) // 2, 3)
                     biggest_spaces_m = group_nearest_spaces(sorted(spaces_m, key=lambda e: -e[1] + e[0]))[
                                        :num_spaces + other_spaces_m]
-                    image_spaces_m = highlight_spaces_line(img_line, biggest_spaces_m, "green")
+                    # image_spaces_m = highlight_spaces_line(img_line, biggest_spaces_m, "green")
                     spaces_m_flatten = [el for rng in intervals_to_ranges(biggest_spaces_m) for el in rng]
                     spaces_orig_flatten = [el for rng in intervals_to_ranges(biggest_spaces) for el in rng]
 
                     #
                     # start and end of the line
                     #
-                    start_text = (0, max(first_m, first))
-                    end_text = (min(last_m, last), img_line.shape[1])
+                    whitest_pnt_start = min([
+                        np.argmax(np.count_nonzero(img_line[:, 0:first] == 0, axis=0)),
+                        np.argmax(np.count_nonzero(img_line[:, 0:first_m] == 0, axis=0))
+                    ])
+                    start_text = (0, whitest_pnt_start)
+
+                    end_left_pt = min(last_m, last)
+                    whitest_pnt_end = np.argmax(np.count_nonzero(img_line[:, end_left_pt:] == 0, axis=0),
+                                                axis=0) + end_left_pt
+                    end_text = (whitest_pnt_end, img_line.shape[1])
 
                     #
                     #   intersection
@@ -332,7 +342,7 @@ def start_alignment():
                                     left = start_text[1]
 
                                 # width of the next word if candidate space is taken
-                                candidate_next_word_width = near_space[0] - candidate[1]
+                                # candidate_next_word_width = near_space[0] - candidate[1]
                                 estimated_width = words_widths_estimate[near]  # +1?
                                 # print("word ", words[near])
 
@@ -345,19 +355,18 @@ def start_alignment():
 
                                 assert right > left
 
-                                candidate_next_word_width = candidate[0] - near_space[1]
+                                # candidate_next_word_width = candidate[0] - near_space[1]
                                 try:
                                     estimated_width = words_widths_estimate[near + 1]
                                 except IndexError:
                                     print("## no near +1 ", near + 1)
                                     pass    # keeps the last assignment
-                            try:
-                                estimated_next_word_width = words_widths_estimate[near + 2]
-                            except IndexError:
-                                estimated_next_word_width = 0
+                            # try:
+                            #     estimated_next_word_width = words_widths_estimate[near + 2]
+                            # except IndexError:
+                            #     estimated_next_word_width = 0
 
                             candidate_word_width = candidate[0] - left
-                            current_word_width = right - left
                             difference = abs(candidate_word_width - estimated_width) / estimated_width
                             # print("estimated_next ", estimated_next_word_width)
                             candidate_area = (candidate[1] - candidate[0]) * img_line.shape[0] / 2
@@ -400,6 +409,19 @@ def start_alignment():
 
                                 assert len(drawn) == num_missings
 
+                                for d_lft, d_rt in drawn:
+                                    # inserted spaces overlaps start_text or end_text?
+                                    if start_text[0] < d_lft <= start_text[1]:
+                                        print("insert space overlapping with start_text")
+                                        start_text = (start_text[0], np.argmax(
+                                            np.count_nonzero(img_line[:, :d_lft], axis=0), axis=0))
+                                    elif end_text[0] <= d_rt < end_text[1]:
+                                        print("insert space overlapping with end_text")
+                                        guard = min(end_text[1] - d_rt, 10)
+                                        left_end = np.argmax(np.count_nonzero(img_line[:, d_rt + guard:], axis=0),
+                                                             axis=0) + d_rt + guard
+                                        end_text = (left_end, end_text[1])
+
                                 selected_spaces = sorted(
                                     [start_text] + [take_spaces[i] for i in selected_row_indexes] + drawn + [end_text])
                                 # exit
@@ -423,10 +445,20 @@ def start_alignment():
                         space_left = selected_spaces[sp-1]
                         space_right = selected_spaces[sp]
                         # whitest column left
-                        left = np.argmin(np.count_nonzero(img_line[:, space_left[0]:space_left[1]] == 0, axis=0), axis=0)
+                        try:
+                            left = np.argmin(np.count_nonzero(img_line[:, space_left[0]:space_left[1]] == 0, axis=0),
+                                             axis=0)
+                        except ValueError:
+                            print(space_left[0], space_left[1], " attempt to get argmin of an empty sequence")
+                            left = 0
                         left += space_left[0]
                         # whitest column right
-                        right = np.argmin(np.count_nonzero(img_line[:, space_right[0]:space_right[1]] == 0, axis=0), axis=0)
+                        try:
+                            right = np.argmax(np.count_nonzero(img_line[:, space_right[0]:space_right[1]] == 0, axis=0),
+                                              axis=0)
+                        except ValueError:  # attempt to get argmin of an empty sequence
+                            print(space_right[0], space_right[1], " attempt to get argmin of an empty sequence")
+                            right = space_right[1]
                         right += space_right[0]
 
                         # left (start bbx x), top_y (start bbx y), width, height
@@ -451,9 +483,6 @@ def start_alignment():
             output_file = os.path.join(mapping_path, fnm + "_bbxs2transcription.json")
             with open(output_file, "w") as of:
                 json.dump(obj=bboxes2transcript, fp=of, indent=4)
-
-            # sorted txt files
-            # fs = sorted(os.listdir(), key= lambda s: [int(el) for el in s.split('.')[0].split('_')[:2][::-1]])
 
 
 if __name__ == '__main__':

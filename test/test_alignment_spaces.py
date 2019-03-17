@@ -62,6 +62,9 @@ def estimate_word_width(tsc_word: str, default_char_width=20, all_lowercase=Fals
 
 
 if __name__ == '__main__':
+
+    # TODO update (see test_alignment_space_ui.py)
+
     dst_dir = '../aligned'
     tsc_dir_name = '../transcriptions'
     img_dir_name = '../images'

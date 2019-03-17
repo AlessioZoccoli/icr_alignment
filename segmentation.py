@@ -73,6 +73,35 @@ def space_in_line(line_image: np.ndarray, strip=True, erode_dilate=False) -> (li
     return spaces_in_line_simple(line_image, strip)
 
 
+# def insert_subspace(image: np.ndarray, bigger: tuple, smaller: tuple) -> tuple:
+#     """
+#     smaller is partially or totally inside bigger
+#     :param image: input image
+#     :param bigger: bigger space
+#     :param smaller: smaller space
+#     :return: bigger and smaller updated
+#     """
+#     bigger_new, smaller_new = bigger, smaller
+#     if smaller[0] <= bigger[0]:
+#         bigger_new = (np.argmax(np.count_nonzero(image[:, smaller[1]:]), axis=0))
+#     return None
+
+# def split_overlapping_spaces(image:np.ndarray, left: tuple, right: tuple) -> tuple:
+#     """
+#     shorter space is inside bigger
+#     :param left: leftmost spaces (based on the starting x)
+#     :param right: rightmost space
+#     :return: updated spaces (a_new, b_new)
+#     """
+#     left_new, right_new = left, right
+#
+#     # right is inside left or they overlap on the right
+#     if left[1] >= right[1]:
+#         left_new = (left[0], np.argmax(np.count_nonzero(image[:, left[0]:right[0]]), axis=0)+left[0])
+#     elif left[1] < right[1]:
+#         left_new =
+
+
 def spaces_in_line_manipulated(line_image: np.ndarray, strip=True, discount=10) -> (list, int):
     """
     Returns the coordinates of the spaces inside line_image as intervals (startIntrv, endIntrv) and the center
@@ -157,6 +186,8 @@ def spaces_in_line_simple(line_image: np.ndarray, strip=True, discount=10) -> (l
     spaces_intervals = [(sp[0], sp[-1]) for ind, sp in enumerate(spaces) if sp[-1] - sp[0] >= 5]
     starts_at = spaces_intervals[0][1]
     ends_at = spaces_intervals[-1][0]
+
+    # show_image(line_image[:, spaces_intervals[-1][0]:spaces_intervals[-1][1]])
 
     # not much ink on the end but we don't want them as spaces
     if starts_at+1 == spaces_intervals[0][0]:
