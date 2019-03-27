@@ -102,7 +102,6 @@ def test_start_alignment():
         if stop == "y":
             break
         else:
-
             # output data structure
             bboxes2transcript = rec_defaultdict()
 
@@ -134,8 +133,10 @@ def test_start_alignment():
 
             # testing specific lines
             try:
-                lines_to_test = list(map(int, input("choose lines to test ").strip(',')))
-            except ValueError:
+                lines_to_test = list(map(int, input("choose lines to test ").strip().split(',')))
+                print(lines_to_test)
+            except ValueError as v:
+                print(v)
                 lines_to_test = []
 
         for row_ind, (tsc_line, (img_line, top_y)) in enumerate(transcr2img):
@@ -164,24 +165,18 @@ def test_start_alignment():
                 spaces_m_flatten = [el for rng in intervals_to_ranges(biggest_spaces_m) for el in rng]
                 spaces_orig_flatten = [el for rng in intervals_to_ranges(biggest_spaces) for el in rng]
 
-                # gc_m = [(sp[0], sp[-1]) for sp in group_consecutive_values(spaces_m_flatten, threshold=1)]
-                # gc = [(sp[0], sp[-1]) for sp in group_consecutive_values(spaces_orig_flatten, threshold=1)]
-
-                # show_image(highlight_spaces_line(img_line, gc_m + [(last_m, img_line.shape[1])], "green"), name='m')
-                # show_image(highlight_spaces_line(img_line, gc + [(last_m, img_line.shape[1])], "red"), name='orig')
-
-                #
-                # start and end of the line
-                #
+                # start of the line
                 whitest_pnt_start = min([
                     (np.argmax(np.count_nonzero(img_line[:, 0:first] == 0, axis=0), axis=0), 0),
                     (np.argmax(np.count_nonzero(img_line[:, 0:first_m] == 0, axis=0), axis=0), 1)
                 ], key=lambda e: e[0])
                 start_text = (0, whitest_pnt_start[0])
-
+                # end of the line
                 end_left_pt = min(last_m, last)
-                whitest_pnt_end = np.argmax(np.count_nonzero(img_line[:, end_left_pt:] == 0, axis=0), axis=0) + end_left_pt
+                white_count_rev = np.count_nonzero(img_line[:, end_left_pt:], axis=0)[::-1]
+                whitest_pnt_end = len(white_count_rev) - 1 - np.argmax(white_count_rev) + end_left_pt
                 end_text = (whitest_pnt_end, img_line.shape[1])
+
 
                 ####
                 # show_image(img_line[:, 0:first], name=str(whitest_pnt_start[1] == 0)[0] + ' ' + str(row_ind))
@@ -424,15 +419,25 @@ def test_start_alignment():
                             for d_lft, d_rt in drawn:
                                 # inserted spaces overlaps start_text or end_text?
                                 if start_text[0] < d_lft <= start_text[1]:
+                                    print("### inserted starting space")
                                     start_text = (start_text[0], np.argmax(
                                         np.count_nonzero(img_line[:, :d_lft], axis=0), axis=0))
                                 elif end_text[0] <= d_rt < end_text[1]:
-                                    guard = min(end_text[1] - d_rt, 10)
-                                    left_end = np.argmax(np.count_nonzero(img_line[:, d_rt + guard:], axis=0),
-                                                         axis=0) + d_rt + guard
-
-                                    show_image(img_line[:, left_end:], name='left')
+                                    print("### inserted ending space ", end_text)
+                                    white_count_rev = np.count_nonzero(img_line[:, d_rt:], axis=0)[::-1]
+                                    left_end = len(white_count_rev) - 1 - np.argmax(white_count_rev, axis=0)
                                     end_text = (left_end, end_text[1])
+
+                                    """
+                                    # the correct cutting columns is likely to be at the end of the line (and of the
+                                    # selected sub-image)
+                                    guard = min(end_text[1] - d_rt, 10)
+                                    # argmax take the "first" max, so start scanning from the right
+                                    white_count_rev = np.count_nonzero(img_line[:, d_rt + guard:], axis=0)[::-1]
+                                    left_end = len(white_count_rev) - 1 - np.argmax(white_count_rev, axis=0)\
+                                        + d_rt + guard
+                                    end_text = (left_end, end_text[1])
+                                    """
 
                             selected_spaces = sorted(
                                 [start_text] + [take_spaces[i] for i in selected_row_indexes] + drawn + [end_text]
@@ -458,17 +463,30 @@ def test_start_alignment():
                     space_right = selected_spaces[sp]
                     # whitest column left
                     try:
-                        left = np.argmin(np.count_nonzero(img_line[:, space_left[0]:space_left[1]] == 0, axis=0), axis=0)
+                        left = np.argmax(np.count_nonzero(img_line[:, space_left[0]:space_left[1]], axis=0))
                     except ValueError:
                         print(space_left[0], space_left[1], " attempt to get argmin of an empty sequence")
                         left = 0
                     left += space_left[0]
 
                     # whitest column right
+                    """
+                    
+                                    white_count_rev = np.count_nonzero(img_line[:, d_rt + guard:], axis=0)[::-1]
+                                    left_end = len(white_count_rev) - 1 - np.argmax(white_count_rev, axis=0)\
+                                        + d_rt + guard
+                                    end_text = (left_end, end_text[1])
+                    
+                    """
                     try:
-                        right = np.argmin(np.count_nonzero(img_line[:, space_right[0]:space_right[1]] == 0, axis=0), axis=0)
+                        if sp == len(selected_spaces)-1:  # last space?
+                            print("###### cutting the last space")
+                            white_count_rev = np.count_nonzero(img_line[:, space_right[0]:], axis=0)[::-1]
+                            right = len(white_count_rev) - 1 - np.argmax(white_count_rev)
+                        else:
+                            right = np.argmax(np.count_nonzero(img_line[:, space_right[0]:space_right[1]], axis=0))
                     except ValueError:  # attempt to get argmin of an empty sequence
-                        print(space_right[0], space_right[1], " attempt to get argmin of an empty sequence")
+                        print(space_right[0], space_right[1], " attempt to get argmax of an empty sequence")
                         right = space_right[1]
                     right += space_right[0]
 
@@ -476,7 +494,7 @@ def test_start_alignment():
                     bbx_name = "{}_{}_{}_{}".format(left + left_margin, top_y, right - left, img_line.shape[0])
                     try:
                         bboxes2transcript[row_ind][bbx_name] = words[sp - 1]
-                        # show_image(img_line[:, left: right], name=words[sp - 1])
+                        show_image(img_line[:, left: right], name=words[sp - 1])
                         # print(words[sp - 1], '\n')
 
                     except IndexError:

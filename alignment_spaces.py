@@ -124,7 +124,7 @@ def start_alignment():
             # cut capital letters at margin
             page_img, left_margin = remove_left_margin(page_img_og)
             # segment page image into lines
-            img_lines = page_to_lines(page_img)
+            img_lines = page_to_lines_2(page_img)
             # load GT transcription
             with open(os.path.join(TSC_DIR, fnm.split('_')[0] + TSC_EXT), 'r') as tsc_file:
                 tsc_lines = tsc_file.readlines()
@@ -170,14 +170,14 @@ def start_alignment():
                     # start and end of the line
                     #
                     whitest_pnt_start = min([
-                        np.argmax(np.count_nonzero(img_line[:, 0:first] == 0, axis=0)),
-                        np.argmax(np.count_nonzero(img_line[:, 0:first_m] == 0, axis=0))
+                        np.argmax(np.count_nonzero(img_line[:, 0:first] == 0, axis=0), axis=0),
+                        np.argmax(np.count_nonzero(img_line[:, 0:first_m] == 0, axis=0), axis=0)
                     ])
                     start_text = (0, whitest_pnt_start)
 
                     end_left_pt = min(last_m, last)
-                    whitest_pnt_end = np.argmax(np.count_nonzero(img_line[:, end_left_pt:] == 0, axis=0),
-                                                axis=0) + end_left_pt
+                    white_count_rev = np.count_nonzero(img_line[:, end_left_pt:], axis=0)[::-1]
+                    whitest_pnt_end = len(white_count_rev) - 1 - np.argmax(white_count_rev) + end_left_pt
                     end_text = (whitest_pnt_end, img_line.shape[1])
 
                     #
@@ -393,6 +393,7 @@ def start_alignment():
                     # draw missing spaces if any
                     has_missing_spaces = input("draw spaces? (empty = NO else int):  ")
                     selected_spaces = []
+
                     if has_missing_spaces:
                         # valid input
                         while not isinstance(eval(has_missing_spaces), int):
@@ -417,9 +418,8 @@ def start_alignment():
                                             np.count_nonzero(img_line[:, :d_lft], axis=0), axis=0))
                                     elif end_text[0] <= d_rt < end_text[1]:
                                         print("insert space overlapping with end_text")
-                                        guard = min(end_text[1] - d_rt, 10)
-                                        left_end = np.argmax(np.count_nonzero(img_line[:, d_rt + guard:], axis=0),
-                                                             axis=0) + d_rt + guard
+                                        white_count_rev = np.count_nonzero(img_line[:, d_rt:], axis=0)[::-1]
+                                        left_end = len(white_count_rev) - 1 - np.argmax(white_count_rev, axis=0)
                                         end_text = (left_end, end_text[1])
 
                                 selected_spaces = sorted(
@@ -454,7 +454,7 @@ def start_alignment():
                         left += space_left[0]
                         # whitest column right
                         try:
-                            right = np.argmax(np.count_nonzero(img_line[:, space_right[0]:space_right[1]] == 0, axis=0),
+                            right = np.argmin(np.count_nonzero(img_line[:, space_right[0]:space_right[1]] == 0, axis=0),
                                               axis=0)
                         except ValueError:  # attempt to get argmin of an empty sequence
                             print(space_right[0], space_right[1], " attempt to get argmin of an empty sequence")

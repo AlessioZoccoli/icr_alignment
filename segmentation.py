@@ -427,6 +427,9 @@ def remove_left_margin_fourier(page_img: np.ndarray, r_or_v=None) -> tuple:
 
 def page_to_lines(page_img: np.ndarray) -> np.ndarray:
     """
+    IMPORTANT: use page_to_lines_2 for robustness against short text lines
+
+    Splits each page into an array of rectangular images, each rectangle is a line of text
 
     :param page_img: input image in greyscale
     :return: list of lines of text as (image, y-start of text)
@@ -441,6 +444,30 @@ def page_to_lines(page_img: np.ndarray) -> np.ndarray:
     # page_img[min_ixs,:] = 127
     # plt.imshow(page_img)
     # plt.show()
+
+    for i in range(0, len(min_ixs) - 1):
+        top_y = min_ixs[i]
+        bottom_y = min_ixs[i + 1]
+        line = page_img[top_y:bottom_y]
+        lines.append((line, top_y))
+
+    return np.array(lines)
+
+
+def page_to_lines_2(page_img: np.ndarray) -> np.ndarray:
+    """
+    Splits each page into an array of rectangular images, each rectangle is a line of text.
+
+    :param page_img: input image in greyscale
+    :return: list of lines of text as (image, y-start of text)
+    """
+    black_px_per_row = np.count_nonzero(cv2.bitwise_not(page_img[:, :page_img.shape[1] // 2]), axis=1)
+    threshold = np.average(black_px_per_row) * 1.1
+    ixs = np.argwhere(black_px_per_row < threshold)
+    ixs_grouped = group_consecutive_values(ixs, threshold=7)
+
+    min_ixs = [int(np.average(ixs)) for ixs in ixs_grouped]
+    lines = []
 
     for i in range(0, len(min_ixs) - 1):
         top_y = min_ixs[i]
